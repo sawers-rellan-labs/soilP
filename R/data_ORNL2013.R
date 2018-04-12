@@ -1,0 +1,29 @@
+#' Global Gridded Soil Phosphorus Distribution Maps. 
+#' Oak Ridge National Laboratory, 2013.
+#' 
+#' A map of total soil P and the distribution among mineral bound, labile,
+#' organic, occluded, and secondary P forms in soils globally
+#' at 0.5-degree Resolution. 
+#' 
+#' 
+#' @docType data
+#'
+#' @usage data(ORNL2013)
+#'
+#' @format An object of class \code{"RasterBrick"}; see \code{\link[raster]{raster}}.
+#'
+#' @keywords datasets
+#'
+#' @references Yang, X., Post, W. M., Thornton, P. E., & Jain, A. (2013).
+#'             The distribution of soil phosphorus for global biogeochemical
+#'             modeling. Biogeosciences, 10(4), 2525-2537. 
+#'             doi:10.5194/bg-10-2525-2013
+#'                  
+#' (\href{https://www.biogeosciences.net/10/2525/2013/}{Biogeosciences})
+#'
+#' @source \href{https://daac.ornl.gov/cgi-bin/dsviewer.pl?ds_id=1223}{ORNL}
+#'
+#' @examples
+#' data(ORNL2013)
+#' plot(ORNL2013[[1]])
+"ORNL2013"

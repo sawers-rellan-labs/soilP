@@ -1,0 +1,76 @@
+---
+title: "Extract soil P Retention Classes for Accessions in Root Phenotype Study"
+output:
+  html_notebook:
+    highlight: tango
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+---
+
+# Loading Libraries
+
+```{r, message=FALSE, warning=FALSE, results="hide"}
+library(dplyr)
+library(soilP)
+library(ggplot2)
+```
+
+# Loading stored data from previous workflow steps
+
+```{r}
+data(soilclass)
+data(ISRIC2011)
+data_dir <- system.file("data", package = "soilP", mustWork = TRUE)
+extdata_dir <- system.file("extdata", package = "soilP", mustWork = TRUE)
+```
+
+# Importing  maize accession collection coordinates
+
+```{r}
+grin_file <- file.path(extdata_dir, "GRIN.csv")
+grin <- read.csv(grin_file) %>%
+        select(accenumb,longdec, latdec, elevation)
+```
+
+# Importing Burton 2013 maize accession root phenotypes
+```{r}
+burton_file <- file.path(extdata_dir,"burton2013.csv")
+burton2013 <- read.csv(burton_file)
+```
+
+# Merging georefence data and phenotype data
+```{r}
+georef <- burton2013 %>%
+          left_join(grin, by = c("Accession" = "accenumb"))
+
+# minor correction for an Argentinian Accession in GRIN
+georef[georef$Accession == "PI 516074",
+       c("longdec","latdec")] <- c(-68.064167, -38.9525)
+
+georef$elevation.class <- classify_elevation(georef$elevation)
+```
+
+
+# Obtainning P retention classes form coordinates
+
+```{r}
+ISRIC_P <- extract_P_ISRIC(ISRIC2011, georef, soilclass,
+                           lon = "longdec", lat = "latdec")
+```
+
+# Plotting Phosphorus Retention Potential Maps
+```{r}
+data(mountain)
+bg_map("longdec", "latdec", data = ISRIC_P$georef, bg = mountain) +
+  geom_point(aes(x = longdec, y = latdec,
+                 shape = elevation.class,
+                 colour = main), 
+             data = ISRIC_P$georef) +
+  facet_wrap( ~ domestication, ncol = 2) +
+  scale_color_manual(values = ISRIC_P$pal,
+                     name = "Phosphorus\nRetention\nPotential",
+                     breaks = ISRIC_P$breaks ) +
+  scale_shape_manual(values = c(16,15, 17, 18))
+```
