@@ -53,7 +53,14 @@ install_github("sawers-rellan-labs/soilP")
 ```
 ## Read the notebooks
 
-Full documentation on the analysis workflow.
+Full documentation on the analysis workflow, best rendered from the local repository / installation copies of the html files, not the online github Rmd.
 
+### Rpubs versions  
+
+[00_soilclass.nb.html](http://rpubs.com/faustovrz/379389)  
+
+[01_extract_P.nb.html](http://rpubs.com/faustovrz/379390)  
+
+[02_extract_P_burton.nb.html](http://rpubs.com/faustovrz/379391)
 
   

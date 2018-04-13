@@ -224,4 +224,3 @@ levelplot(ISRIC2011, att = "main", col.regions = soilclass$color_hex[1:16],
           main = "Generalized Phosphorus Retention Potential Map")
 
 ```
-
