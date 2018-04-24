@@ -29,7 +29,7 @@ setwd("../")
 document("soilP")
 build("soilP")
 
-install.packages(pkgs = "soilP_0.1.0.tar.gz",
+install.packages(pkgs = "soilP_0.2.0.tar.gz",
                  repos = NULL, # Tells R not to try to get the package from CRAN
                  type = "source" )
 setwd("./soilP")
@@ -38,3 +38,4 @@ setwd("./soilP")
 path <- find.package("soilP")
 system(paste(shQuote(file.path(R.home("bin"), "R")),
              "CMD", "Rd2pdf", "--force", shQuote(path)))
+# load_all(pkg = here())

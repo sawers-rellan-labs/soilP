@@ -1,6 +1,6 @@
 Package: soilP
 Title: Local Adapation to Soil Phosphorus Availability
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: person("Fausto", "Rodriguez-Zapata", email = "faustovrz@gmail.com", role = c("aut", "cre"))
 Description: Spatial analysis and Genome screening for 
              Local Adapation to Soil Phosphorus Availability .

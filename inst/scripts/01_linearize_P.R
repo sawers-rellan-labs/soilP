@@ -1,0 +1,458 @@
+#' ---
+#' title: "Reading ISRIC Phosphorus Retention Data"
+#' output:
+#'   html_notebook:
+#'     highlight: tango
+#'     number_sections: true
+#'     theme: spacelab
+#'     toc: true
+#'     toc_float: true
+#' ---
+
+#' # Loading Libraries
+
+#+  message=FALSE, warning=FALSE, results="hide"
+library(raster)
+library(soilP)
+library(dplyr)
+library(tidyr)
+library(Hmisc)
+library(MASS)
+library(ggplot2)
+library(ade4)
+
+#' # Reading ISRIC 2011 data
+#' ## Starting with the base raster file
+#' First we load the raster. 
+#+ 
+data_dir    <- system.file("data",    package = "soilP", mustWork = TRUE)
+extdata_dir <- system.file("extdata", package = "soilP", mustWork = TRUE)
+
+FAO74_tif <- file.path(extdata_dir,"ISRIC2011", "FAO74.tif")
+
+# Initializing ISRIC2011 list with the base map
+ISRIC2011 <- list()
+ISRIC2011$FAO74 <- raster::raster(FAO74_tif)
+
+
+
+#' This raster has a single layer and its  value corresponds to the soil map unit 
+#' identifier (ID) for the Soil Map of the World, FAO74. The same identifier can
+#' be found in more recent versions of the FAO soil map and in the harmonized soil 
+#' database.
+#' 
+#' ## Plotting FAO Soil Map Unit Raster
+#+  fig.height=4, fig.width=10, warning=FALSE
+nb_plot(ISRIC2011$FAO74, main = "Soil Map of the World, FAO74")
+
+
+#' The MUIDs have the lowest values in Africa and then ascend through Asia,
+#' the Americas, Oceania and attain the highest values in Europe.
+#' Contrary to what the file name seems to imply these ids do not directly
+#' represent  the phosphorus retention potential. Batjes used the ids and 
+#' a series of SQL queries to assign phosphorus retention potential classes
+#' to each map unit, which then are easily projected over each pixel in the
+#' map.
+#' 
+#' These main classes can be extracted from the map unit raster, and the tables in
+#' the mdb files. These tables function as raster attribute tables.
+#' 
+#' ## Extracting Raster Attribute Table from Microsoft Access database (`mdb` file).
+#' 
+#' For this I need Hmisc and the ODBC drivers. Mac installation is from brew.
+#' 
+#' The MS Access database has the tables for mapping the soil unit identifiers to
+#' soil properties, i.e. phosphorus retention as soil unit composition percentage, 
+#' or physicochemical variables.
+
+#+ 
+
+mdb_file <- file.path(
+  extdata_dir,
+  "ISRIC2011",
+  "ISRIC_Phosphorus_Retention_Potential.mdb")
+
+
+#' ## Adding Raster Attribute Table, including Map Unit P Retention Potential 
+#' 
+#' `levels<-` S3 method is internal to `raster` and it could not be
+#' exported  to `soilP`, which prevented me from making a working package function
+#' out of the following snippet:
+
+
+#+ 
+
+### Get Raster Attribute Tables
+ISRIC_AT <- list()
+
+ISRIC_AT <- read_ISRIC_AT(mdb_file)
+
+### Adding ID Raster Attribute Table to FAO74
+ISRIC2011$FAO74 <- raster::raster(FAO74_tif)
+ISRIC2011$FAO74 <- raster::ratify(ISRIC2011$FAO74)
+
+levels(ISRIC2011$FAO74) <- ISRIC_AT$mapunit
+
+
+#' # Soil Map Phosphorus Retention Potential as Percentages of Map Units
+#' 
+#' A phosphorus retention potential class was assigned to each of the FAO74
+#' soil units (Low, Moderate, High and very High). 
+#' Each map unit is composed of up to 8 soil units in different area percentages.
+#' Depending on the composition of the map unit and each component soil unit 
+#' phosphorus retention potential class a  map unit class was assigned.
+#' In total 260 different phosphorus retention potential classes were assigned to
+#' the 4923 map units. These were further grouped into 16 main phosphorus retention
+#' potential classes.
+
+#+  fig.height=4, fig.width=10, warning=FALSE
+
+pct_vars <- c("Lo", "Mo", "Hi", "VH", "MISC") 
+
+ISRIC2011 <- c(ISRIC2011, layers_from(ISRIC2011$FAO74,cols = pct_vars))
+
+for (varname in pct_vars) {
+  out_tif <- file.path( extdata_dir, "ISRIC2011", paste0(varname,".tif"))
+    
+  writeRaster(ISRIC2011[[varname]],
+              file = out_tif,
+              datatype = 'INT1U',
+              overwrite = TRUE)
+    
+  nb_plot(ISRIC2011[[varname]], main =  varname)
+}
+
+
+
+
+#' # Rebuilding the arcgis render appeareance 
+#' 
+#' We will use a manually curated raster attribute table stored in th `soilclass`
+#' dataframe.
+#' 
+#' See the manual for details.
+#+ 
+?soilclass
+
+
+#' ## Adding Raster Attribute Table to  `ISRIC2011$FAO74`
+#' 
+#' First we need to  merge `soilclass` to the Soil Map Unit id number, then we add this as the RAT to the FAO74 raster.
+
+
+#+ 
+
+### Adding ID Raster Attribute Table to FAO74
+
+ISRIC_AT$mu_soilclass <- ISRIC_AT$mapunit %>% 
+    dplyr::left_join(soilclass, by = c("mainclass" = "main"))
+
+levels(ISRIC2011$FAO74) <- ISRIC_AT$mu_soilclass
+
+
+#' ##  Reclassifying the FAO74 soil map into ascending Phosphorus Retention Classes
+#' 
+#' I manually assigned integers in ascending order to the
+#' `ascending` column in the `soilclass` dataframe as follows: For the Low map unit
+#' main class, higher percentage of Low soil unit P retention corresponded to lower
+#' integers. For the Moderate class, a multivariate analysis reveled that Mo2 has a
+#' higher content of Low souil units,snd  simirlaly Mo3 has a greater content of Hi
+#' soil units tan Mo1, which suggests a Mo2, Mo1, Mo3, ascending order.
+#' For the High, and very High map unit main classes, higher integers were assigned
+#' to higher percentage of corresponding soil unit P retention. 
+#' This means the higher the Low soil unit P retention percentage the lower 
+#' the integer, and complentarily the higher the High, and Very 
+#' High soil unit P retention percentage the higher the integer, except in the
+#' Moderate class that behaves unexpectedly.
+
+
+#+ 
+
+ISRIC2011$main <- layers_from(ISRIC2011$FAO74, cols = "ascending")[[1]]
+
+raster::writeRaster(
+  ISRIC2011$main,
+  file.path(extdata_dir,"ISRIC2011","main.tif"),
+  datatype = 'INT1U',
+  overwrite = TRUE)
+
+
+
+#' ## Plotting Soil Phosphorus Retention Potential Raster
+
+#+  fig.height=4, fig.width=10, warning=FALSE
+
+nb_plot(ISRIC2011$main,
+        axis.args = list(breaks=0:15, at = 0:15, cex.axis = 2),
+        main =  "Phosphorus Retention Potential, ISRIC2011")
+
+
+
+#' Now the numbers do represent the phosphorus retention potential!!!
+#' 
+#' However, the `raster` plot legend above assumes a continuous scale from 0 to 15,
+#' while the data is explicitly a categorical variable (although derived from
+#' continuous percentages, see above). 
+
+
+#+ 
+# Raster Attribute Table
+ISRIC2011$main <- raster::ratify(ISRIC2011$main)
+# Assign RAT to main class raster
+levels(ISRIC2011$main) <- rat(ISRIC2011$main) %>% 
+    dplyr::inner_join(soilclass, by = c("ID" = "ascending"))
+
+
+#' ## Adding arcgis render color and saving the map as full resolution geotif
+
+#+  fig.height=4, fig.width=10, warning=FALSE
+
+main_color <- layers_from(ISRIC2011$FAO74, cols = c("r","g","b"))
+
+plotRGB(stack(main_color))
+
+writeRaster(stack(main_color),
+  filename  = file.path(extdata_dir, "ISRIC2011","main_color.tif"),
+  datatype  = "INT1U",
+  options   = "TFW=YES",
+  format    = "GTiff",
+  overwrite = TRUE)
+
+
+#' ## Using rasterVis to appropiately label categories and add legend 
+#' Remember that we assigned to the to the phosphorus retention potential main
+#' classes an *ad hoc* order so we can interpret a direction of ascending retention 
+#' potential (see above) in the plot legend.
+#' 
+#' In order to show the right labels in this ascending scale we use the `levelplot`
+#' function from `RasterVis` that uses the raster attribute table to transform the 
+#' numerical value of the raster to discrete categories.
+
+
+#+ 
+rasterVis::levelplot(
+  ISRIC2011$main, att = "main",
+  col.regions = soilclass$color_hex[1:16],
+  maxpixels = ncell(ISRIC2011$main),
+  scales = list(draw = FALSE),
+  xlab = NULL, ylab = NULL,
+  main = "Generalized Phosphorus Retention Potential Map")
+
+
+
+#' 
+#' 
+#' # Multivariate analysis of Soil retention Potential
+#' 
+#' We should establish a data based order of map unit soil phosphorus 
+#' retention classes instead of postulating an ad hoc order. This can be done
+#' through selecting the first discriminant dimension from a Discriminant
+#' Analysis of the percentage of soil unit phosphorus retention classes per
+#' mapping unit. Furthermore, we can use that discriminant dimention as a
+#' continuous variable instead of the discrete classes for downstream
+#' analyses
+#'       
+#' ## Map Unit Soil Composition Matrix and entropy
+#' 
+#' Each soil unit percentage can be used as a map unit descriptor variable for 
+#' multivariate analysis of the phosphorus retention potential per map unit.
+
+#+ 
+ISRIC_AT <- within(ISRIC_AT, {
+  su_share <- soil_composition(mapunit,FAO74)
+  su_share <- as.data.frame(
+    cbind( ID = mapunit$ID,
+           su_share,
+           soilS = row_entropy(su_share/100)))
+})
+
+
+#' However this results in sparse matrix with essentially orthogonal columns.
+#' 
+#' ## Phosphorus Retention, Soil Unit Composition  Join table
+
+#+ 
+phychem_vars <- c("pH","SAND","SILT","CLAY","CECLAY")
+su_types <- colnames(ISRIC_AT$su_share)
+ret_vars <- c("ID",
+              "mainclass",
+              phychem_vars,
+              pct_vars,
+              su_types)
+
+levels <- soilclass %>%
+            dplyr::arrange(ascending) %>%
+            dplyr::select(main)
+
+ISRIC_AT <- within(ISRIC_AT, {
+  ret_share <- mapunit %>%
+    dplyr::left_join(soilunit, by = c("SOIL1" = "key")) %>%
+    dplyr::left_join(su_share, by = "ID") %>%
+    dplyr::select(!!!ret_vars) 
+  ret_share$mainclass <- factor(ret_share$mainclass, levels = levels$main[1:16])
+})
+
+
+
+
+#' ## Soil and Phosphorus Retention Class Composition Entropy
+#+ 
+ISRIC_AT <- within(ISRIC_AT, {
+  ret_share$pS <- row_entropy(ret_share[,pct_vars] / 100)
+})
+
+with(ISRIC_AT,{
+  boxplot(soilS ~ mainclass, data = ret_share, las = 2, 
+          main = "Map Unit Soil Composition Entropy")
+  boxplot(pS ~ mainclass, data = ret_share, las = 2,
+          main = "Phosphorus Retention Class Composition Entropy")
+})
+
+
+#' ## Exploratory Discriminant Analysis using `ade4`
+#' 
+#' Soil Retention Potential Space is essentially a tetrahedron with Moderate
+#' retention at its center.Only three degrees of freedom, Lo-VH, Mo-Hi, Lo-Hi.
+
+
+#+ 
+# create dudi object for discriminant analysis
+
+soil_idx <- with(ISRIC_AT$ret_share,{
+    which(is_soil(mainclass))
+})
+
+soil_data <- ISRIC_AT$ret_share[soil_idx,-1]
+
+soil_data$mainclass   <- with(ISRIC_AT$ret_share,{
+    factor(mainclass[soil_idx], levels = levels$main[5:16])
+})
+
+
+
+pca <- dudi.pca(soil_data[,-1], scannf = FALSE, nf = 139)
+  
+dis <- discrimin(pca, fac = soil_data$mainclass, scannf = FALSE, nf = 10)
+palette <- soilclass$color_hex[5:16]
+color <- palette[soil_data$mainclass]
+
+# Select most important variables
+disva <- as.data.frame(dis$va)
+disva$idx <- (1:nrow(dis$va)) / 1000
+
+major_vars <- 1000 * disva %>% 
+  dplyr::filter_all(any_vars(abs(.) > 0.5)) %>%
+  dplyr::select(idx)
+
+# Plot
+par(mfrow = c(2, 2))
+s.class(dis$li, xax = 2, yax = 1, fac = soil_data$mainclass, col = palette)
+s.class(dis$li, xax = 3, yax = 1, fac = soil_data$mainclass, col = palette)
+s.class(dis$li, xax = 3, yax = 2, fac = soil_data$mainclass, col = palette)
+s.corcircle(dis$va[major_vars$idx,])
+par(mfrow = c(1, 1))
+
+
+#' 
+#' ## Linearization of Phosphorus Retention Potential with `MASS` LDA
+#' 
+#' The `MASS` LDA wiill use all info by default.
+
+#+ 
+
+fit <- MASS::lda(mainclass ~ ., data = soil_data)
+
+plda <- predict(object = fit, # predictions
+                 newdata = ISRIC_AT$ret_share[,-c(1,2)])
+
+
+
+#' From categorical variable to continous "linear" scale.
+#' Linear combination of map unit soil content.
+
+#+ 
+ret_scale<- NA
+ISRIC_AT <- within(ISRIC_AT,{
+  ret_scale <- ret_share[,c("ID",pct_vars)]
+  ret_scale$ret <- ret_share$mainclass
+  ret_scale[!is_soil(ret_scale$ret), pct_vars] <- NA
+})
+
+
+ISRIC_AT$ret_scale <- within(ISRIC_AT$ret_scale,{
+    # Weighted scale, ad hoc weights!!!!!!    
+    weighted <- as.double((Lo + 2 * Mo + 3 * Hi + 4 * VH) / 400)
+    # Linear Discrimant scale, post hoc weights/coefficients
+    LD1 <-  plda$x[,1]
+    LD2 <-  -plda$x[,2] # sign manually adjusted
+    LD3 <-  -plda$x[,3] # sign manually adjusted
+    LD1[!is_soil(ret)] <- NA
+    LD2[!is_soil(ret)] <- NA
+    LD3[!is_soil(ret)] <- NA
+})
+
+
+
+#+  fig.asp = 1
+with(ISRIC_AT,{
+  plot_P_scales(ret_scale[soil_idx,], palette = palette,
+              scale_x = "LD2",scale_y = "weighted")
+})
+
+
+
+#+ 
+ld_vars <- c("weighted", "LD1", "LD2", "LD3")
+
+ISRIC_AT <- within(ISRIC_AT,{
+  raster_scale <- mu_soilclass[,c("ID",pct_vars)] %>% 
+    dplyr::left_join(ret_scale[,c("ID",ld_vars)],
+                     by = c("ID" = "ID")) %>%
+    dplyr::mutate_if(colnames(.) %in% ld_vars, scale256)
+})
+
+
+#' ## Linear Discriminant Maps
+#+  fig.height=4, fig.width=10, warning=FALSE
+
+levels(ISRIC2011$FAO74) <- ISRIC_AT$raster_scale
+
+ISRIC2011 <- c(ISRIC2011, layers_from(ISRIC2011$FAO74, cols = ld_vars))
+
+for(varname in ld_vars) {
+
+  out_tif <- file.path( extdata_dir, "ISRIC2011", paste0(varname,".tif"))
+    
+  writeRaster(ISRIC2011[[varname]],
+              file = out_tif,
+              datatype = 'INT1U',
+              overwrite = TRUE)
+    
+  nb_plot(ISRIC2011[[varname]], main =  varname)
+}
+
+# finally save ISRIC2011 in .RData format
+save(ISRIC_AT, file = file.path(data_dir, "ISRIC_AT.RData"))
+save(ISRIC2011, file = file.path(data_dir, "ISRIC2011.RData"))
+
+
+#' ## False Color Combination of Linear Discriminants
+#+  fig.height=4, fig.width=10, warning=FALSE
+
+LD_composite <- stack(ISRIC2011[c("LD2","LD1","LD3")])
+
+op <- par()
+par(mar = c(0, 0, 0, 0), oma = c(0, 0, 0, 0))
+
+plotRGB(LD_composite)
+
+par(op)
+
+out_tif <- file.path(extdata_dir,"ISRIC2011","LD_composite.tif")
+writeRaster(LD_composite, filename = out_tif,
+            datatype  = "INT1U",
+            options   = "TFW=YES",
+            format    = "GTiff",
+            overwrite = TRUE)
+
+

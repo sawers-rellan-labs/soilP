@@ -1,0 +1,17 @@
+
+# Another Phosphorus Database
+
+```{r, eval=F}
+library(rgdal)
+library(raster)
+
+qgis_dir <- file.path(extdata_dir,"i_mod")
+
+rod_handle <- new("GDALReadOnlyDataset", qgis_dir)
+#getDriverLongName(getDriver(rod_handle))
+arcgrid <- asSGDF_GROD(rod_handle)
+raster <- raster::raster(arcgrid)
+plot(raster) 
+```
+
+

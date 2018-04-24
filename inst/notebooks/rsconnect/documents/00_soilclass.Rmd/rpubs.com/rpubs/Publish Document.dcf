@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/379389/4948a26a75044a36a67317f02f65db9a
+bundleId: https://api.rpubs.com/api/v1/document/379389/4948a26a75044a36a67317f02f65db9a
+url: http://rpubs.com/faustovrz/379389
+when: 1524606530.46615

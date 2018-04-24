@@ -14,51 +14,12 @@
 #' 
 #' In this 2011 ISRIC map we can distinguish 16 different main classes of map unit
 #' according to its soil phosphorus retention potential.
-#' 
-#' 
-#' # Starting with the wrong file
-#' 
-#' So I naively assumed that the the geotif available at the ISRIC website contains
-#' the same information as the map above.
+
 
 #+  message=FALSE, warning=FALSE, results="hide"
-library(soilP)      # Phosphorus maps
-library(raster)
-library(rasterVis)  # Plot categorical raster
-
-data_dir <- system.file("data", package = "soilP", mustWork = TRUE)
-extdata_dir <- system.file("extdata", package = "soilP", mustWork = TRUE)
-
-test_tif <- file.path(extdata_dir,
-            "Global_distribution_of_soil_phosphorus_retention_potential",
-            "Global_distribution_of_soil_phosphorus_retention_potential.tif")
-test_raster <- raster(test_tif) 
+library(soilP)     # Phosphorus maps
 
 
-#' However, when we plot the raster file we get a suspiciously unexpected
-#' distribuition of soil phosphorus retention potential:
-
-#+  fig.height=4, fig.width=10, warning=FALSE
-op <- par()
-par(mar = c(0, 0, 0, 0), oma = c(0, 0, 0, 0))
-plot(test_raster, axes = FALSE, box = FALSE,
-     frame.plot = FALSE,
-     legend.width = 2,
-     legend.shrink = 0.95,
-     axis.args = list(cex.axis = 2),
-     legend.args = list(text = "", cex = 1))
-par(op)
-
-#' With the lowest values in Africa and then ascending through Asia, the Americas,
-#' Oceania and the highest values in Europe.
-#' 
-#' After inspection of the Arcgis files and the Batjes 2011 report, I can
-#' infer that the values in this geotif seem to be indices of different FAO soil
-#' unit domains. They do not represent directly the phosphorus retention potential 
-#' contrary to what the file name seems to imply. Using that index and a series of
-#' SQL queries the author assigns phosphorus retention potential classes to each
-#' pixel/map unit in the map. 
-#' 
 #' # Where did `soilclass` data came from?
 #' 
 #' See the manual for details.
@@ -73,6 +34,8 @@ par(op)
 #' P_retention_class_main properties.
 
 #+ 
+data_dir    <- system.file("data",    package = "soilP", mustWork = TRUE)
+extdata_dir <- system.file("extdata", package = "soilP", mustWork = TRUE)
 
 soilclass <- read.csv(file.path(extdata_dir,"P_retention_class.csv")) 
 
@@ -126,102 +89,5 @@ soilclass <- soilclass[order(soilclass$ascending),]
 save(soilclass, file = file.path(data_dir,"soilclass.RData"))
 
 soilclass
-
-
-#' # Reading ISRIC map from the geotiff file
-
-#+ 
-tif_in <- file.path(extdata_dir, "tif",
-                    "P_retention_potential_main_grey.tif")
-
-tif_out <- file.path( extdata_dir, "tif",
-                       "P_retention_potential_main_grey_ascending.tif")
-
-ISRIC2011 <- read_P_ISRIC(tif       = tif_in,
-                          soilclass = soilclass,
-                          is        = "arcgis",
-                          becomes   = "ascending",
-                          filename  = tif_out)
-
-
-#' #  Adding Raster Attribute Table to  `ISRIC2011`
-#' `levels<-` S3 method is internal to `raster` package and could not be exported 
-#' to the `soilP` package, which prevented me from making a working package function
-#' out of the following snippet:
-
-#+ 
-# Raster Attribute Table
-rat <- levels(ISRIC2011)[[1]] %>% 
-       dplyr::inner_join(soilclass, by = c("ID" = "ascending"))
-
-levels(ISRIC2011) <- rat # This assignment method is not exported from raster
-
-save(ISRIC2011, file = file.path(data_dir, "ISRIC2011.RData"))
-
-
-#' ## Raster Plot
-
-#+  fig.height=4, fig.width=10, warning=FALSE
-op <- par()
-par(mar = c(0, 0, 0, 0), oma = c(0, 0, 0, 0))
-plot(ISRIC2011, axes = FALSE, box = FALSE,
-     frame.plot = FALSE,
-     legend.width = 2,
-     legend.shrink = 0.95,
-     axis.args = list(breaks=1:14, at = 0:15, cex.axis = 2),
-     legend.args = list(text = "", cex = 1))
-par(op)
-
-
-#' ## Pixel density histogram
-
-#+ 
-ISRIC2011_hist <- hist(ISRIC2011,maxpixels = ncell(ISRIC2011),
-                       breaks = c(0, 0.99 + 0:15), xlab = "value",
-                       main = "Phosphorus Retention Potential")
-
-
-#' # Rebuilding the arcgis render appeareance 
-#' From the data, the color and the value correspondence between the arcgis 8bit
-#' and ascending order. 
-
-#+  fig.height=4, fig.width=10, warning=FALSE
-op <- par()
-par(mar = c(0, 0, 0, 0), oma = c(0, 0, 0, 0))
-
-plot(ISRIC2011, 
-     col = soilclass$color_hex[1:16],
-     breaks = c(0,0.99 + 0:15),
-     axes = FALSE, box = FALSE,
-     frame.plot = FALSE,
-     legend.width = 2,
-     legend.shrink = 0.95,
-     axis.args = list(at       = c(0,0.99 + 0:15),
-                      labels   = c("",0:15), 
-                      cex.axis = 2),
-     legend.args = list(text = "", cex = 1))
-par(op)
-
-
-#' However, the `raster` plot legend above assumes a continuous scale from 0 to 15,
-#' while the data is explicitly a categorical variable (although derived from
-#' continuous percentages, see Batjes 2011). 
-#' 
-#' # Using rasterVis to appropiately label categories and show legend 
-#' Remember that we assigned to the to the phosphorus retention potential main
-#' classes an *ad hoc* order so we can interpret a direction of ascending retention 
-#' potential (see above) in the plot legend.
-#' 
-#' In order to show the right labels in this ascending scale we use the `levelplot`
-#' function from `RasterVis` that uses the raster attribute table to transform the 
-#' numerical value of the raster to discrete categories.
-
-
-#+ 
-levelplot(ISRIC2011, att = "main", col.regions = soilclass$color_hex[1:16],
-          maxpixels = ncell(ISRIC2011),  scales = list(draw = FALSE),
-          xlab = NULL, ylab = NULL,
-          main = "Generalized Phosphorus Retention Potential Map")
-
 
 
