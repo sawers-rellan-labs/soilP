@@ -1,6 +1,9 @@
 # soilP  
+[![DOI](https://zenodo.org/badge/129322524.svg)](https://zenodo.org/badge/latestdoi/129322524)
+
 ---
 Local adaptation to Phosphorus Availability
+
 
 This package helps in the extraction from geographical coordinates of  phosphorus data from two sources, ISRIC for soil retention, and  Oakridge National Laboratory for soil availabilty.
 
